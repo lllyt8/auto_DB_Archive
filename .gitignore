@@ -1,0 +1,14 @@
+Meeting_Notes/
+Plans/
+Plan/
+
+# Local secrets/config
+config/db_archive.yaml
+.env
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# OS
+.DS_Store
