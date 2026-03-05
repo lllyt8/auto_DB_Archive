@@ -19,7 +19,7 @@ mysql:
   host: localhost
   port: 3306
   user: db_archive
-  password: epc@20201231
+  password: "@20201231"
   database: epcenergy_ess_01
 
 email:
