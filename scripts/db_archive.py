@@ -33,6 +33,7 @@ except ImportError:  # pragma: no cover
 
 ARCHIVE_SUFFIX_RE = re.compile(r"_a\d{8,12}$")
 IDENT_RE = re.compile(r"^[A-Za-z0-9_]+$")
+UNRESOLVED_ENV_TOKEN_RE = re.compile(r"^\$(\{[A-Za-z_][A-Za-z0-9_]*\}|[A-Za-z_][A-Za-z0-9_]*)$")
 
 
 @dataclass(frozen=True)
@@ -131,6 +132,14 @@ def expand_env(value: Any) -> Any:
     return value
 
 
+def validate_not_unresolved_env(field_name: str, value: str) -> None:
+    if UNRESOLVED_ENV_TOKEN_RE.fullmatch(value.strip()):
+        raise ValueError(
+            f"{field_name} still looks like an unresolved env token: {value}. "
+            "Set the environment variable or replace with a real value in config."
+        )
+
+
 def load_config(path: str) -> AppConfig:
     if yaml is None:
         raise RuntimeError("PyYAML is required. Install with: pip install PyYAML")
@@ -173,6 +182,8 @@ def load_config(path: str) -> AppConfig:
     )
     if not mysql.user or not mysql.password:
         raise ValueError("config.mysql.user and config.mysql.password are required")
+    validate_not_unresolved_env("config.mysql.user", mysql.user)
+    validate_not_unresolved_env("config.mysql.password", mysql.password)
 
     email_cfg = cfg.get("email", {})
     email = EmailConfig(
@@ -185,6 +196,10 @@ def load_config(path: str) -> AppConfig:
         smtp_password=str(email_cfg.get("smtp_password", "")),
         starttls=bool(email_cfg.get("starttls", True)),
     )
+    if email.smtp_user:
+        validate_not_unresolved_env("config.email.smtp_user", email.smtp_user)
+    if email.smtp_password:
+        validate_not_unresolved_env("config.email.smtp_password", email.smtp_password)
 
     timescale_cfg = cfg.get("timescale_check", {})
     timescale_check = TimescaleCheckConfig(
