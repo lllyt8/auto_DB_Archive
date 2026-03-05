@@ -18,19 +18,19 @@ tables:
 mysql:
   host: localhost
   port: 3306
-  user: ${ARCHIVE_DB_USER}
-  password: ${ARCHIVE_DB_PASSWORD}
+  user: db_archive
+  password: epc@20201231
   database: epcenergy_ess_01
 
 email:
   enabled: true
-  sender: it@epcenergy.io
+  sender: EpcItEnergy@gmail.com
   recipients:
     - it@epcenergy.io
   smtp_host: smtp.gmail.com
   smtp_port: 587
-  smtp_user: ${ARCHIVE_SMTP_USER}
-  smtp_password: ${ARCHIVE_SMTP_PASSWORD}
+  smtp_user: EpcItEnergy@gmail.com
+  smtp_password: "arns edao fikz fued"
   starttls: true
 
 timescale_check:
