@@ -7,7 +7,6 @@ import argparse
 import datetime as dt
 import os
 import re
-import smtplib
 import subprocess
 import sys
 import uuid
@@ -47,11 +46,7 @@ class EmailConfig:
     enabled: bool
     sender: str
     recipients: List[str]
-    smtp_host: str
-    smtp_port: int
-    smtp_user: str
-    smtp_password: str
-    starttls: bool
+    sendmail_path: str
 
 
 @dataclass(frozen=True)
@@ -190,16 +185,8 @@ def load_config(path: str) -> AppConfig:
         enabled=bool(email_cfg.get("enabled", True)),
         sender=str(email_cfg.get("sender", "")),
         recipients=[str(x).strip() for x in email_cfg.get("recipients", []) if str(x).strip()],
-        smtp_host=str(email_cfg.get("smtp_host", "")),
-        smtp_port=int(email_cfg.get("smtp_port", 587)),
-        smtp_user=str(email_cfg.get("smtp_user", "")),
-        smtp_password=str(email_cfg.get("smtp_password", "")),
-        starttls=bool(email_cfg.get("starttls", True)),
+        sendmail_path=str(email_cfg.get("sendmail_path", "/usr/sbin/sendmail")),
     )
-    if email.smtp_user:
-        validate_not_unresolved_env("config.email.smtp_user", email.smtp_user)
-    if email.smtp_password:
-        validate_not_unresolved_env("config.email.smtp_password", email.smtp_password)
 
     timescale_cfg = cfg.get("timescale_check", {})
     timescale_check = TimescaleCheckConfig(
@@ -441,20 +428,31 @@ def send_email_notice(
     if not email_cfg.sender:
         logger.warning("Email sender missing; skip sending email.")
         return
-    if not email_cfg.smtp_host or not email_cfg.smtp_user or not email_cfg.smtp_password:
-        logger.warning("SMTP settings incomplete; skip sending email.")
+    sendmail_path = email_cfg.sendmail_path.strip()
+    if not sendmail_path:
+        logger.warning("sendmail_path is empty; skip sending email.")
+        return
+    if not Path(sendmail_path).exists():
+        logger.warning("sendmail binary not found at %s; skip sending email.", sendmail_path)
         return
 
     msg = MIMEText(body, "plain", "utf-8")
     msg["Subject"] = subject
     msg["From"] = email_cfg.sender
     msg["To"] = ", ".join(email_cfg.recipients)
+    msg["Reply-To"] = email_cfg.sender
 
-    with smtplib.SMTP(email_cfg.smtp_host, email_cfg.smtp_port) as smtp:
-        if email_cfg.starttls:
-            smtp.starttls()
-        smtp.login(email_cfg.smtp_user, email_cfg.smtp_password)
-        smtp.sendmail(email_cfg.sender, email_cfg.recipients, msg.as_string())
+    proc = subprocess.run(
+        [sendmail_path, "-t", "-i"],
+        input=msg.as_string(),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"sendmail failed rc={proc.returncode}; stderr={proc.stderr.strip()}"
+        )
     logger.info("Email sent to %s", ", ".join(email_cfg.recipients))
 
 

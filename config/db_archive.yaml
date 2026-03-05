@@ -24,14 +24,10 @@ mysql:
 
 email:
   enabled: true
-  sender: EpcItEnergy@gmail.com
+  sender: noreply@epcenergy.app
   recipients:
     - it@epcenergy.io
-  smtp_host: smtp.gmail.com
-  smtp_port: 587
-  smtp_user: EpcItEnergy@gmail.com
-  smtp_password: "arns edao fikz fued"
-  starttls: true
+  sendmail_path: /usr/sbin/sendmail
 
 timescale_check:
   enabled: false
