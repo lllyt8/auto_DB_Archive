@@ -9,5 +9,8 @@ Plan/
 __pycache__/
 *.py[cod]
 
+# Runtime logs
+logs/
+
 # OS
 .DS_Store
