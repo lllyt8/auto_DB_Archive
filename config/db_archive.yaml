@@ -2,7 +2,7 @@ database: epcenergy_ess_01
 max_generations: 4
 schedule_timezone: EST
 dry_run: true
-log_path: /home/epc_ai/aidetect/logs/db_archive.log
+log_path: /home/epc_ai/auto_DB_Archive/logs/db_archive.log
 lock_path: /tmp/db_archive.lock
 
 tables:
