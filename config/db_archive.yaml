@@ -26,7 +26,7 @@ email:
   enabled: true
   sender: noreply@epcenergy.app
   recipients:
-    - it@epcenergy.io
+    - taylor.zhu@epcenergy.io
   sendmail_path: /usr/sbin/sendmail
 
 timescale_check:
