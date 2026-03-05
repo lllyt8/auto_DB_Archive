@@ -2,7 +2,7 @@
 
 ## 1) Prepare files on server
 1. Copy `scripts/db_archive.py` to `/home/epc_ai/aidetect/scripts/db_archive.py`.
-2. Copy `config/db_archive.yaml.example` to `/home/epc_ai/aidetect/config/db_archive.yaml`.
+2. Copy `config/db_archive.yaml` to `/home/epc_ai/aidetect/config/db_archive.yaml`.
 3. Edit `/home/epc_ai/aidetect/config/db_archive.yaml` with production credentials.
 4. Keep SMTP and DB passwords as environment variables in the shell profile used by cron.
 

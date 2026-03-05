@@ -3,7 +3,6 @@ Plans/
 Plan/
 
 # Local secrets/config
-config/db_archive.yaml
 .env
 
 # Python cache
