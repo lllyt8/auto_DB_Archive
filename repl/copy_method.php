@@ -71,6 +71,95 @@ function hash_row(array $row, array $columns)
     );
 }
 
+function canonicalize_column_name($column)
+{
+    return strtolower(preg_replace('/[^a-z0-9]/i', '', (string)$column));
+}
+
+function fetch_target_columns($dbTarget, $logicalTable)
+{
+    static $cache = array();
+    if (isset($cache[$logicalTable])) {
+        return $cache[$logicalTable];
+    }
+
+    $sql = 'SELECT column_name FROM information_schema.columns'
+        . ' WHERE table_schema = :schema_name AND table_name = :table_name'
+        . ' ORDER BY ordinal_position ASC';
+    $stmt = $dbTarget->prepare($sql);
+    $stmt->execute(
+        array(
+            'schema_name' => 'public',
+            'table_name' => $logicalTable,
+        )
+    );
+
+    $columns = array();
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $columns[] = $row['column_name'];
+    }
+
+    if (empty($columns)) {
+        throw new RuntimeException("Target table not found or has no columns: {$logicalTable}");
+    }
+
+    $cache[$logicalTable] = $columns;
+    return $columns;
+}
+
+function build_target_column_map($dbTarget, $logicalTable, array $sourceColumns)
+{
+    static $cache = array();
+    $cacheKey = $logicalTable . '|' . implode(',', $sourceColumns);
+    if (isset($cache[$cacheKey])) {
+        return $cache[$cacheKey];
+    }
+
+    $targetColumns = fetch_target_columns($dbTarget, $logicalTable);
+    $exact = array_fill_keys($targetColumns, true);
+    $canonical = array();
+    foreach ($targetColumns as $targetColumn) {
+        $canonicalKey = canonicalize_column_name($targetColumn);
+        if (!isset($canonical[$canonicalKey])) {
+            $canonical[$canonicalKey] = array();
+        }
+        $canonical[$canonicalKey][] = $targetColumn;
+    }
+
+    $mapping = array();
+    foreach ($sourceColumns as $sourceColumn) {
+        if (isset($exact[$sourceColumn])) {
+            $mapping[$sourceColumn] = $sourceColumn;
+            continue;
+        }
+
+        $canonicalKey = canonicalize_column_name($sourceColumn);
+        $matches = $canonical[$canonicalKey] ?? array();
+        if (count($matches) !== 1) {
+            throw new RuntimeException(
+                "Unable to map source column {$sourceColumn} to target table {$logicalTable}"
+            );
+        }
+        $mapping[$sourceColumn] = $matches[0];
+    }
+
+    $cache[$cacheKey] = $mapping;
+    return $mapping;
+}
+
+function remap_source_rows(array $sourceRows, array $columnMap)
+{
+    $mappedRows = array();
+    foreach ($sourceRows as $row) {
+        $mapped = array();
+        foreach ($columnMap as $sourceColumn => $targetColumn) {
+            $mapped[$targetColumn] = $row[$sourceColumn] ?? null;
+        }
+        $mappedRows[] = $mapped;
+    }
+    return $mappedRows;
+}
+
 function chunked_target_candidates($dbTarget, $logicalTable, array $columns, array $sourceRows)
 {
     if (empty($sourceRows)) {
@@ -210,9 +299,12 @@ function copy_segment_batch(
         );
     }
 
-    $columns = array_keys($sourceRows[0]);
-    $targetRows = chunked_target_candidates($dbTarget, $logicalTable, $columns, $sourceRows);
-    list($missingRows, $targetMatches) = filter_missing_rows($sourceRows, $targetRows, $columns);
+    $sourceColumns = array_keys($sourceRows[0]);
+    $columnMap = build_target_column_map($dbTarget, $logicalTable, $sourceColumns);
+    $columns = array_values($columnMap);
+    $mappedSourceRows = remap_source_rows($sourceRows, $columnMap);
+    $targetRows = chunked_target_candidates($dbTarget, $logicalTable, $columns, $mappedSourceRows);
+    list($missingRows, $targetMatches) = filter_missing_rows($mappedSourceRows, $targetRows, $columns);
 
     $insertedRows = 0;
     if ($apply && !empty($missingRows)) {
