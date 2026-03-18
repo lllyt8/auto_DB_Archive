@@ -1,0 +1,48 @@
+[11-Aug-2025 03:21:06 America/New_York] PHP Warning:  file_get_contents(/home/epcenergy/logs/server_state.log): Failed to open stream: No such file or directory in /var/www/html/repl/log_message.php on line 61
+[11-Aug-2025 03:21:06 America/New_York] PHP Warning:  Trying to access array offset on value of type null in /var/www/html/repl/log_message.php on line 65
+[11-Aug-2025 03:21:06 America/New_York] PHP Warning:  Trying to access array offset on value of type null in /var/www/html/repl/log_message.php on line 65
+[11-Aug-2025 03:21:06 America/New_York] PHP Warning:  file_get_contents(/home/epcenergy/logs/server_state.log): Failed to open stream: No such file or directory in /var/www/html/repl/log_message.php on line 61
+[11-Aug-2025 03:21:06 America/New_York] PHP Warning:  Trying to access array offset on value of type null in /var/www/html/repl/log_message.php on line 65
+[11-Aug-2025 03:21:06 America/New_York] PHP Warning:  Trying to access array offset on value of type null in /var/www/html/repl/log_message.php on line 65
+[11-Aug-2025 03:21:06 America/New_York] PHP Warning:  error_log(/home/epcenergy/logs/11_rep.log): Failed to open stream: No such file or directory in /var/www/html/repl/log_message.php on line 17
+[11-Aug-2025 03:21:42 America/New_York] PHP Warning:  file_get_contents(/home/epcenergy/logs/server_state.log): Failed to open stream: No such file or directory in /var/www/html/repl/log_message.php on line 61
+[11-Aug-2025 03:21:42 America/New_York] PHP Warning:  Trying to access array offset on value of type null in /var/www/html/repl/log_message.php on line 65
+[11-Aug-2025 03:21:42 America/New_York] PHP Warning:  Trying to access array offset on value of type null in /var/www/html/repl/log_message.php on line 65
+[11-Aug-2025 03:21:42 America/New_York] PHP Warning:  file_get_contents(/home/epcenergy/logs/server_state.log): Failed to open stream: No such file or directory in /var/www/html/repl/log_message.php on line 61
+[11-Aug-2025 03:21:42 America/New_York] PHP Warning:  Trying to access array offset on value of type null in /var/www/html/repl/log_message.php on line 65
+[11-Aug-2025 03:21:42 America/New_York] PHP Warning:  Trying to access array offset on value of type null in /var/www/html/repl/log_message.php on line 65
+[11-Aug-2025 03:21:42 America/New_York] PHP Warning:  error_log(/home/epcenergy/logs/11_rep.log): Failed to open stream: No such file or directory in /var/www/html/repl/log_message.php on line 17
+[11-Aug-2025 03:21:52 America/New_York] PHP Warning:  file_get_contents(/home/epcenergy/logs/server_state.log): Failed to open stream: No such file or directory in /var/www/html/repl/log_message.php on line 61
+[11-Aug-2025 03:21:52 America/New_York] PHP Warning:  Trying to access array offset on value of type null in /var/www/html/repl/log_message.php on line 65
+[11-Aug-2025 03:21:52 America/New_York] PHP Warning:  Trying to access array offset on value of type null in /var/www/html/repl/log_message.php on line 65
+[11-Aug-2025 03:21:52 America/New_York] PHP Warning:  file_get_contents(/home/epcenergy/logs/server_state.log): Failed to open stream: No such file or directory in /var/www/html/repl/log_message.php on line 61
+[11-Aug-2025 03:21:52 America/New_York] PHP Warning:  Trying to access array offset on value of type null in /var/www/html/repl/log_message.php on line 65
+[11-Aug-2025 03:21:52 America/New_York] PHP Warning:  Trying to access array offset on value of type null in /var/www/html/repl/log_message.php on line 65
+[11-Aug-2025 03:21:52 America/New_York] PHP Warning:  error_log(/home/epcenergy/logs/11_rep.log): Failed to open stream: No such file or directory in /var/www/html/repl/log_message.php on line 17
+[11-Aug-2025 03:27:39 America/New_York] PHP Deprecated:  Creation of dynamic property Database::$CONN is deprecated in /var/www/html/repl/connection.php on line 23
+[11-Aug-2025 03:27:39 America/New_York] PHP Deprecated:  Creation of dynamic property Database::$CONN is deprecated in /var/www/html/repl/connection.php on line 23
+[20-Aug-2025 21:23:46 America/New_York] PHP Deprecated:  Creation of dynamic property Database::$CONN is deprecated in /var/www/html/repl/connection.php on line 23
+[20-Aug-2025 21:23:46 America/New_York] PHP Deprecated:  Creation of dynamic property Database::$CONN is deprecated in /var/www/html/repl/connection.php on line 23
+[20-Aug-2025 22:12:55 America/New_York] PHP Deprecated:  Creation of dynamic property Database::$CONN is deprecated in /var/www/html/repl/connection.php on line 23
+[20-Aug-2025 22:12:55 America/New_York] PHP Deprecated:  Creation of dynamic property Database::$CONN is deprecated in /var/www/html/repl/connection.php on line 23
+[20-Aug-2025 22:16:25 America/New_York] PHP Warning:  Undefined array key "39.107.248.6" in /var/www/html/repl/log_message.php on line 65
+[20-Aug-2025 22:16:25 America/New_York] PHP Warning:  Trying to access array offset on value of type null in /var/www/html/repl/log_message.php on line 65
+[20-Aug-2025 22:16:25 America/New_York] PHP Deprecated:  Creation of dynamic property Database::$CONN is deprecated in /var/www/html/repl/connection.php on line 23
+[20-Aug-2025 22:17:48 America/New_York] PHP Warning:  Undefined array key "39.107.248.6" in /var/www/html/repl/log_message.php on line 65
+[20-Aug-2025 22:17:48 America/New_York] PHP Warning:  Trying to access array offset on value of type null in /var/www/html/repl/log_message.php on line 65
+[20-Aug-2025 22:17:48 America/New_York] PHP Deprecated:  Creation of dynamic property Database::$CONN is deprecated in /var/www/html/repl/connection.php on line 23
+[20-Aug-2025 22:17:48 America/New_York] PHP Deprecated:  Creation of dynamic property Database::$CONN is deprecated in /var/www/html/repl/connection.php on line 23
+[20-Aug-2025 22:18:46 America/New_York] PHP Deprecated:  Creation of dynamic property Database::$CONN is deprecated in /var/www/html/repl/connection.php on line 23
+[20-Aug-2025 22:18:46 America/New_York] PHP Deprecated:  Creation of dynamic property Database::$CONN is deprecated in /var/www/html/repl/connection.php on line 23
+[20-Aug-2025 22:32:01 America/New_York] PHP Deprecated:  Creation of dynamic property Database::$CONN is deprecated in /var/www/html/repl/connection.php on line 23
+[20-Aug-2025 22:32:01 America/New_York] PHP Deprecated:  Creation of dynamic property Database::$CONN is deprecated in /var/www/html/repl/connection.php on line 23
+[20-Aug-2025 22:33:26 America/New_York] PHP Deprecated:  Creation of dynamic property Database::$CONN is deprecated in /var/www/html/repl/connection.php on line 23
+[20-Aug-2025 22:33:26 America/New_York] PHP Deprecated:  Creation of dynamic property Database::$CONN is deprecated in /var/www/html/repl/connection.php on line 23
+[20-Aug-2025 22:43:43 America/New_York] PHP Deprecated:  Creation of dynamic property Database::$CONN is deprecated in /var/www/html/repl/connection.php on line 23
+[20-Aug-2025 22:43:43 America/New_York] PHP Deprecated:  Creation of dynamic property Database::$CONN is deprecated in /var/www/html/repl/connection.php on line 23
+[21-Aug-2025 02:48:34 America/New_York] PHP Deprecated:  Creation of dynamic property Database::$CONN is deprecated in /var/www/html/repl/connection.php on line 23
+[21-Aug-2025 02:48:34 America/New_York] PHP Deprecated:  Creation of dynamic property Database::$CONN is deprecated in /var/www/html/repl/connection.php on line 23
+[01-Sep-2025 01:46:43 America/New_York] PHP Deprecated:  Creation of dynamic property Database::$CONN is deprecated in /home/epcenergyapp/public_html/repl/connection.php on line 23
+[01-Sep-2025 01:46:43 America/New_York] PHP Deprecated:  Creation of dynamic property Database::$CONN is deprecated in /home/epcenergyapp/public_html/repl/connection.php on line 23
+[01-Sep-2025 01:57:29 America/New_York] PHP Deprecated:  Creation of dynamic property Database::$CONN is deprecated in /home/epcenergyapp/public_html/repl/connection.php on line 23
+[01-Sep-2025 01:57:29 America/New_York] PHP Deprecated:  Creation of dynamic property Database::$CONN is deprecated in /home/epcenergyapp/public_html/repl/connection.php on line 23

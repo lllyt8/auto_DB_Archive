@@ -15,9 +15,12 @@ from email.mime.text import MIMEText
 from logging import Formatter, INFO, Logger, StreamHandler, getLogger
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Iterable, List, Optional, Sequence, Tuple
 
-import fcntl
+try:  # pragma: no cover - import path differs between script execution and tests
+    from .coordination import CoordinationStore, FileLock
+except ImportError:  # pragma: no cover
+    from coordination import CoordinationStore, FileLock
 
 try:
     import mysql.connector as mysql_connector
@@ -66,6 +69,15 @@ class MySQLConfig:
 
 
 @dataclass(frozen=True)
+class CoordinationConfig:
+    lock_path: str
+    state_dir: str
+    drop_requires_replication_complete: bool
+    wait_timeout_seconds: int
+    wait_poll_seconds: int
+
+
+@dataclass(frozen=True)
 class AppConfig:
     database: str
     tables: List[TableConfig]
@@ -73,10 +85,10 @@ class AppConfig:
     schedule_timezone: str
     dry_run: bool
     log_path: str
-    lock_path: str
     mysql: MySQLConfig
     email: EmailConfig
     timescale_check: TimescaleCheckConfig
+    coordination: CoordinationConfig
 
 
 @dataclass(frozen=True)
@@ -119,7 +131,7 @@ def q(identifier: str) -> str:
 
 def expand_env(value: Any) -> Any:
     if isinstance(value, dict):
-        return {k: expand_env(v) for k, v in value.items()}
+        return {key: expand_env(item) for key, item in value.items()}
     if isinstance(value, list):
         return [expand_env(item) for item in value]
     if isinstance(value, str):
@@ -141,7 +153,7 @@ def load_config(path: str) -> AppConfig:
     raw = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
     cfg = expand_env(raw)
 
-    database = cfg.get("database", "").strip()
+    database = str(cfg.get("database", "")).strip()
     if not database:
         raise ValueError("config.database is required")
 
@@ -153,7 +165,7 @@ def load_config(path: str) -> AppConfig:
     if not table_entries:
         raise ValueError("config.tables must contain at least one table")
 
-    tables = []
+    tables: List[TableConfig] = []
     for entry in table_entries:
         if isinstance(entry, str):
             table_name = entry.strip()
@@ -163,8 +175,6 @@ def load_config(path: str) -> AppConfig:
             table_max = int(entry.get("max_generations", max_generations))
         if not table_name:
             raise ValueError("table entry missing name")
-        if table_max < 1:
-            raise ValueError(f"table {table_name} has invalid max_generations")
         tables.append(TableConfig(name=table_name, max_generations=table_max))
 
     mysql_cfg = cfg.get("mysql", {})
@@ -184,7 +194,7 @@ def load_config(path: str) -> AppConfig:
     email = EmailConfig(
         enabled=bool(email_cfg.get("enabled", True)),
         sender=str(email_cfg.get("sender", "")),
-        recipients=[str(x).strip() for x in email_cfg.get("recipients", []) if str(x).strip()],
+        recipients=[str(item).strip() for item in email_cfg.get("recipients", []) if str(item).strip()],
         sendmail_path=str(email_cfg.get("sendmail_path", "/usr/sbin/sendmail")),
     )
 
@@ -197,17 +207,30 @@ def load_config(path: str) -> AppConfig:
     if timescale_check.mode not in {"warn", "block"}:
         raise ValueError("timescale_check.mode must be 'warn' or 'block'")
 
+    coordination = CoordinationConfig(
+        lock_path=str(
+            cfg.get(
+                "coordination_lock_path",
+                cfg.get("lock_path", "/home/epcenergy/coordination/db_repl_archive.lock"),
+            )
+        ),
+        state_dir=str(cfg.get("shared_state_dir", "/home/epcenergy/coordination/streams")),
+        drop_requires_replication_complete=bool(cfg.get("drop_requires_replication_complete", True)),
+        wait_timeout_seconds=int(cfg.get("coordination_wait_timeout_seconds", 900)),
+        wait_poll_seconds=int(cfg.get("coordination_wait_poll_seconds", 30)),
+    )
+
     return AppConfig(
         database=database,
         tables=tables,
         max_generations=max_generations,
-        schedule_timezone=str(cfg.get("schedule_timezone", "EST")),
+        schedule_timezone=str(cfg.get("schedule_timezone", "America/New_York")),
         dry_run=bool(cfg.get("dry_run", True)),
-        log_path=str(cfg.get("log_path", "/home/epc_ai/aidetect/logs/db_archive.log")),
-        lock_path=str(cfg.get("lock_path", "/tmp/db_archive.lock")),
+        log_path=str(cfg.get("log_path", "/home/epc_ai/auto_DB_Archive/logs/db_archive.log")),
         mysql=mysql,
         email=email,
         timescale_check=timescale_check,
+        coordination=coordination,
     )
 
 
@@ -236,30 +259,6 @@ def setup_logger(log_path: str, run_id: str) -> Logger:
     return logger
 
 
-class FileLock:
-    def __init__(self, path: str):
-        self.path = path
-        self.handle = None
-
-    def __enter__(self) -> "FileLock":
-        lock_file = Path(self.path)
-        lock_file.parent.mkdir(parents=True, exist_ok=True)
-        self.handle = lock_file.open("w", encoding="utf-8")
-        try:
-            fcntl.flock(self.handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError as exc:
-            raise RuntimeError(f"Another archive job is already running: {self.path}") from exc
-        self.handle.write(f"{os.getpid()}\n")
-        self.handle.flush()
-        return self
-
-    def __exit__(self, exc_type, exc, tb) -> None:
-        if self.handle:
-            fcntl.flock(self.handle.fileno(), fcntl.LOCK_UN)
-            self.handle.close()
-            self.handle = None
-
-
 def resolve_tables(config_tables: Sequence[TableConfig], selected: Sequence[str]) -> List[TableConfig]:
     if not selected:
         return list(config_tables)
@@ -270,11 +269,7 @@ def resolve_tables(config_tables: Sequence[TableConfig], selected: Sequence[str]
     return [lookup[name] for name in selected]
 
 
-def list_archive_tables(
-    conn: Any,
-    database: str,
-    base_table: str,
-) -> List[str]:
+def list_archive_tables(conn: Any, database: str, base_table: str) -> List[str]:
     sql = """
         SELECT table_name
         FROM information_schema.tables
@@ -282,28 +277,23 @@ def list_archive_tables(
           AND table_name LIKE %s
         ORDER BY table_name
     """
-    like_pattern = f"{base_table}_a%"
     cursor = conn.cursor()
-    cursor.execute(sql, (database, like_pattern))
-    names = [row[0] for row in cursor.fetchall()]
+    cursor.execute(sql, (database, f"{base_table}_a%"))
+    rows = [row[0] for row in cursor.fetchall()]
     cursor.close()
-    return filter_archive_tables(base_table, names)
+    return filter_archive_tables(base_table, rows)
 
 
 def filter_archive_tables(base_table: str, table_names: Iterable[str]) -> List[str]:
     prefix = f"{base_table}_a"
-    result = []
-    for name in table_names:
-        if name.startswith(prefix) and ARCHIVE_SUFFIX_RE.search(name):
-            result.append(name)
-    return sorted(result)
+    return sorted(
+        name
+        for name in table_names
+        if name.startswith(prefix) and ARCHIVE_SUFFIX_RE.search(name)
+    )
 
 
-def build_archive_name(
-    base_table: str,
-    existing_archives: Sequence[str],
-    now: dt.datetime,
-) -> str:
+def build_archive_name(base_table: str, existing_archives: Sequence[str], now: dt.datetime) -> str:
     base_suffix = now.strftime("%y%m%d%H%M")
     candidate = f"{base_table}_a{base_suffix}"
     if candidate not in existing_archives:
@@ -317,10 +307,18 @@ def compute_drop_candidates(archives: Sequence[str], max_generations: int) -> Li
     return list(sorted(archives)[: len(archives) - max_generations])
 
 
+def query_max_id(conn: Any, database: str, table_name: str) -> int:
+    sql = f"SELECT COALESCE(MAX(id), 0) FROM {q(database)}.{q(table_name)}"
+    cursor = conn.cursor()
+    cursor.execute(sql)
+    row = cursor.fetchone()
+    cursor.close()
+    return int(row[0] or 0)
+
+
 def run_timescale_check(cfg: TimescaleCheckConfig, logger: Logger) -> Tuple[bool, str]:
     if not cfg.enabled:
         return True, "Timescale check disabled"
-
     if not cfg.command:
         msg = "Timescale check enabled but command is empty"
         if cfg.mode == "block":
@@ -335,9 +333,7 @@ def run_timescale_check(cfg: TimescaleCheckConfig, logger: Logger) -> Tuple[bool
         text=True,
         check=False,
     )
-    stdout = proc.stdout.strip()
-    stderr = proc.stderr.strip()
-    detail = f"rc={proc.returncode}; stdout={stdout}; stderr={stderr}"
+    detail = f"rc={proc.returncode}; stdout={proc.stdout.strip()}; stderr={proc.stderr.strip()}"
     if proc.returncode == 0:
         return True, detail
     if cfg.mode == "block":
@@ -353,12 +349,45 @@ def rotate_single_table(
     now: dt.datetime,
     dry_run: bool,
     logger: Logger,
+    store: CoordinationStore,
+    coordination_cfg: CoordinationConfig,
 ) -> TableResult:
     table_name = table_cfg.name
+    stream_state = store.load(table_name, auto_create=False)
+    if stream_state is None:
+        raise RuntimeError(f"Missing stream state for {table_name}. Run repl/init_replication_state.php first.")
+    open_segment = stream_state.open_segment()
+    if open_segment.physical_table != table_name:
+        raise RuntimeError(
+            f"Open segment for {table_name} points to {open_segment.physical_table}, expected {table_name}"
+        )
+
     archive_tables = list_archive_tables(conn, database, table_name)
     new_archive_name = build_archive_name(table_name, archive_tables, now)
+    planned_archive_max_id = query_max_id(conn, database, table_name)
+    planned_state = stream_state.close_open_segment(new_archive_name, planned_archive_max_id, now.isoformat())
     all_archives = sorted(archive_tables + [new_archive_name])
-    to_drop = compute_drop_candidates(all_archives, table_cfg.max_generations)
+    drop_candidates = compute_drop_candidates(all_archives, table_cfg.max_generations)
+    drop_allowed, drop_skipped = store.drop_decision(
+        planned_state,
+        drop_candidates,
+        coordination_cfg.drop_requires_replication_complete,
+    )
+
+    if dry_run:
+        detail = (
+            f"DRY-RUN archive={new_archive_name}; max_id={planned_archive_max_id}; "
+            f"drop={drop_allowed if drop_allowed else []}; "
+            f"skipped={drop_skipped if drop_skipped else []}"
+        )
+        logger.info("[%s] %s", table_name, detail)
+        return TableResult(
+            table=table_name,
+            archive_table=new_archive_name,
+            dropped_tables=drop_allowed,
+            ok=True,
+            detail=detail,
+        )
 
     rename_sql = (
         f"RENAME TABLE {q(database)}.{q(table_name)} TO "
@@ -368,34 +397,38 @@ def rotate_single_table(
         f"CREATE TABLE {q(database)}.{q(table_name)} LIKE "
         f"{q(database)}.{q(new_archive_name)}"
     )
-
-    if dry_run:
-        detail = (
-            f"DRY-RUN archive={new_archive_name}; "
-            f"drop={to_drop if to_drop else '[]'}"
-        )
-        logger.info("[%s] %s", table_name, detail)
-        return TableResult(
-            table=table_name,
-            archive_table=new_archive_name,
-            dropped_tables=to_drop,
-            ok=True,
-            detail=detail,
-        )
-
     cursor = conn.cursor()
+    dropped_tables: List[str] = []
     try:
         cursor.execute(rename_sql)
         cursor.execute(create_sql)
-        for drop_table in to_drop:
-            drop_sql = f"DROP TABLE {q(database)}.{q(drop_table)}"
-            cursor.execute(drop_sql)
-        detail = f"archive={new_archive_name}; drop={to_drop if to_drop else '[]'}"
+
+        archive_max_id = query_max_id(conn, database, new_archive_name)
+        rotated_state = stream_state.close_open_segment(new_archive_name, archive_max_id, now.isoformat())
+        store.save(rotated_state)
+
+        drop_allowed, drop_skipped = store.drop_decision(
+            rotated_state,
+            drop_candidates,
+            coordination_cfg.drop_requires_replication_complete,
+        )
+        for drop_table in drop_allowed:
+            cursor.execute(f"DROP TABLE {q(database)}.{q(drop_table)}")
+            dropped_tables.append(drop_table)
+
+        if dropped_tables:
+            store.save(rotated_state.prune_dropped(dropped_tables))
+
+        detail = (
+            f"archive={new_archive_name}; max_id={archive_max_id}; "
+            f"drop={dropped_tables if dropped_tables else []}; "
+            f"skipped={drop_skipped if drop_skipped else []}"
+        )
         logger.info("[%s] %s", table_name, detail)
         return TableResult(
             table=table_name,
             archive_table=new_archive_name,
-            dropped_tables=to_drop,
+            dropped_tables=dropped_tables,
             ok=True,
             detail=detail,
         )
@@ -405,7 +438,7 @@ def rotate_single_table(
         return TableResult(
             table=table_name,
             archive_table=new_archive_name,
-            dropped_tables=[],
+            dropped_tables=dropped_tables,
             ok=False,
             detail=detail,
         )
@@ -413,27 +446,12 @@ def rotate_single_table(
         cursor.close()
 
 
-def send_email_notice(
-    email_cfg: EmailConfig,
-    subject: str,
-    body: str,
-    logger: Logger,
-) -> None:
-    if not email_cfg.enabled:
-        logger.info("Email disabled in config; skip sending.")
+def send_email_notice(email_cfg: EmailConfig, subject: str, body: str, logger: Logger) -> None:
+    if not email_cfg.enabled or not email_cfg.recipients or not email_cfg.sender:
+        logger.info("Email disabled or missing recipients/sender; skip sending.")
         return
-    if not email_cfg.recipients:
-        logger.warning("No recipients configured; skip sending email.")
-        return
-    if not email_cfg.sender:
-        logger.warning("Email sender missing; skip sending email.")
-        return
-    sendmail_path = email_cfg.sendmail_path.strip()
-    if not sendmail_path:
-        logger.warning("sendmail_path is empty; skip sending email.")
-        return
-    if not Path(sendmail_path).exists():
-        logger.warning("sendmail binary not found at %s; skip sending email.", sendmail_path)
+    if not email_cfg.sendmail_path or not Path(email_cfg.sendmail_path).exists():
+        logger.warning("sendmail binary not found at %s; skip sending email.", email_cfg.sendmail_path)
         return
 
     msg = MIMEText(body, "plain", "utf-8")
@@ -443,16 +461,14 @@ def send_email_notice(
     msg["Reply-To"] = email_cfg.sender
 
     proc = subprocess.run(
-        [sendmail_path, "-t", "-i"],
+        [email_cfg.sendmail_path, "-t", "-i"],
         input=msg.as_string(),
         text=True,
         capture_output=True,
         check=False,
     )
     if proc.returncode != 0:
-        raise RuntimeError(
-            f"sendmail failed rc={proc.returncode}; stderr={proc.stderr.strip()}"
-        )
+        raise RuntimeError(f"sendmail failed rc={proc.returncode}; stderr={proc.stderr.strip()}")
     logger.info("Email sent to %s", ", ".join(email_cfg.recipients))
 
 
@@ -465,9 +481,7 @@ def build_report(
     timescale_detail: str,
     results: Sequence[TableResult],
 ) -> Tuple[str, str]:
-    success = [r for r in results if r.ok]
-    failed = [r for r in results if not r.ok]
-
+    failed = [item for item in results if not item.ok]
     status = "Success" if not failed else "Failed"
     subject = f"DB Archive {status} - {ended_at.strftime('%Y-%m-%d %H:%M:%S')}"
     lines = [
@@ -478,7 +492,7 @@ def build_report(
         f"dry_run: {dry_run}",
         f"timescale_check_ok: {timescale_ok}",
         f"timescale_check_detail: {timescale_detail}",
-        f"success_tables: {len(success)}",
+        f"success_tables: {len(results) - len(failed)}",
         f"failed_tables: {len(failed)}",
         "",
         "Results:",
@@ -490,9 +504,8 @@ def build_report(
 
 def main() -> int:
     args = parse_args()
-    run_id = f"{dt.datetime.now().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:8]}"
-
     config = load_config(args.config)
+    run_id = f"{dt.datetime.now().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:8]}"
     dry_run = config.dry_run
     if args.dry_run:
         dry_run = True
@@ -501,13 +514,12 @@ def main() -> int:
 
     logger = setup_logger(config.log_path, run_id)
     logger.info("Start DB archive run_id=%s", run_id)
-
     selected_tables = resolve_tables(config.tables, args.table)
     logger.info(
         "Mode=%s database=%s tables=%s",
         "DRY-RUN" if dry_run else "RUN",
         config.database,
-        [t.name for t in selected_tables],
+        [item.name for item in selected_tables],
     )
 
     started_at = dt.datetime.now()
@@ -516,13 +528,13 @@ def main() -> int:
     if not timescale_ok:
         ended_at = dt.datetime.now()
         subject, body = build_report(
-            run_id=run_id,
-            started_at=started_at,
-            ended_at=ended_at,
-            dry_run=dry_run,
-            timescale_ok=timescale_ok,
-            timescale_detail=timescale_detail,
-            results=results,
+            run_id,
+            started_at,
+            ended_at,
+            dry_run,
+            timescale_ok,
+            timescale_detail,
+            results,
         )
         try:
             send_email_notice(config.email, subject, body, logger)
@@ -536,7 +548,12 @@ def main() -> int:
             raise RuntimeError(
                 "mysql-connector-python is required. Install with: pip install mysql-connector-python"
             )
-        with FileLock(config.lock_path):
+        store = CoordinationStore(config.coordination.state_dir)
+        with FileLock(
+            config.coordination.lock_path,
+            timeout_seconds=config.coordination.wait_timeout_seconds,
+            poll_seconds=config.coordination.wait_poll_seconds,
+        ):
             conn = mysql_connector.connect(
                 host=config.mysql.host,
                 port=config.mysql.port,
@@ -546,36 +563,33 @@ def main() -> int:
                 autocommit=True,
             )
             try:
-                if config.mysql.database != config.database:
-                    logger.warning(
-                        "config.mysql.database (%s) != config.database (%s)",
-                        config.mysql.database,
-                        config.database,
-                    )
                 now = dt.datetime.now()
                 for table_cfg in selected_tables:
-                    result = rotate_single_table(
-                        conn=conn,
-                        database=config.database,
-                        table_cfg=table_cfg,
-                        now=now,
-                        dry_run=dry_run,
-                        logger=logger,
+                    results.append(
+                        rotate_single_table(
+                            conn=conn,
+                            database=config.database,
+                            table_cfg=table_cfg,
+                            now=now,
+                            dry_run=dry_run,
+                            logger=logger,
+                            store=store,
+                            coordination_cfg=config.coordination,
+                        )
                     )
-                    results.append(result)
             finally:
                 conn.close()
     except Exception:
         logger.exception("Archive run failed before table operations completed.")
         ended_at = dt.datetime.now()
         subject, body = build_report(
-            run_id=run_id,
-            started_at=started_at,
-            ended_at=ended_at,
-            dry_run=dry_run,
-            timescale_ok=timescale_ok,
-            timescale_detail=timescale_detail,
-            results=results,
+            run_id,
+            started_at,
+            ended_at,
+            dry_run,
+            timescale_ok,
+            timescale_detail,
+            results,
         )
         try:
             send_email_notice(config.email, subject, body, logger)
@@ -585,20 +599,20 @@ def main() -> int:
 
     ended_at = dt.datetime.now()
     subject, body = build_report(
-        run_id=run_id,
-        started_at=started_at,
-        ended_at=ended_at,
-        dry_run=dry_run,
-        timescale_ok=timescale_ok,
-        timescale_detail=timescale_detail,
-        results=results,
+        run_id,
+        started_at,
+        ended_at,
+        dry_run,
+        timescale_ok,
+        timescale_detail,
+        results,
     )
     try:
         send_email_notice(config.email, subject, body, logger)
     except Exception:
         logger.exception("Email send failed.")
 
-    failed_count = len([x for x in results if not x.ok])
+    failed_count = len([item for item in results if not item.ok])
     logger.info(
         "Archive completed run_id=%s success=%d failed=%d",
         run_id,

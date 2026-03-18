@@ -3,7 +3,9 @@ max_generations: 4
 schedule_timezone: EST
 dry_run: true
 log_path: /home/epc_ai/auto_DB_Archive/logs/db_archive.log
-lock_path: /tmp/db_archive.lock
+coordination_lock_path: /home/epcenergy/coordination/db_repl_archive.lock
+shared_state_dir: /home/epcenergy/coordination/streams
+drop_requires_replication_complete: true
 
 tables:
   - name: ess_string_HON
