@@ -76,6 +76,40 @@ function canonicalize_column_name($column)
     return strtolower(preg_replace('/[^a-z0-9]/i', '', (string)$column));
 }
 
+function resolve_target_table_name($dbTarget, $logicalTable)
+{
+    static $cache = array();
+    if (isset($cache[$logicalTable])) {
+        return $cache[$logicalTable];
+    }
+
+    $sql = 'SELECT table_name FROM information_schema.tables'
+        . ' WHERE table_schema = :schema_name AND lower(table_name) = lower(:table_name)'
+        . ' ORDER BY table_name ASC';
+    $stmt = $dbTarget->prepare($sql);
+    $stmt->execute(
+        array(
+            'schema_name' => 'public',
+            'table_name' => $logicalTable,
+        )
+    );
+
+    $matches = array();
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $matches[] = $row['table_name'];
+    }
+
+    if (empty($matches)) {
+        throw new RuntimeException("Target table not found: {$logicalTable}");
+    }
+    if (count($matches) > 1) {
+        throw new RuntimeException("Target table lookup is ambiguous for {$logicalTable}");
+    }
+
+    $cache[$logicalTable] = $matches[0];
+    return $matches[0];
+}
+
 function fetch_target_columns($dbTarget, $logicalTable)
 {
     static $cache = array();
@@ -83,6 +117,7 @@ function fetch_target_columns($dbTarget, $logicalTable)
         return $cache[$logicalTable];
     }
 
+    $targetTable = resolve_target_table_name($dbTarget, $logicalTable);
     $sql = 'SELECT column_name FROM information_schema.columns'
         . ' WHERE table_schema = :schema_name AND table_name = :table_name'
         . ' ORDER BY ordinal_position ASC';
@@ -90,7 +125,7 @@ function fetch_target_columns($dbTarget, $logicalTable)
     $stmt->execute(
         array(
             'schema_name' => 'public',
-            'table_name' => $logicalTable,
+            'table_name' => $targetTable,
         )
     );
 
@@ -100,7 +135,7 @@ function fetch_target_columns($dbTarget, $logicalTable)
     }
 
     if (empty($columns)) {
-        throw new RuntimeException("Target table not found or has no columns: {$logicalTable}");
+        throw new RuntimeException("Target table has no columns: {$targetTable}");
     }
 
     $cache[$logicalTable] = $columns;
@@ -160,7 +195,7 @@ function remap_source_rows(array $sourceRows, array $columnMap)
     return $mappedRows;
 }
 
-function chunked_target_candidates($dbTarget, $logicalTable, array $columns, array $sourceRows)
+function chunked_target_candidates($dbTarget, $targetTable, array $columns, array $sourceRows)
 {
     if (empty($sourceRows)) {
         return array();
@@ -178,7 +213,7 @@ function chunked_target_candidates($dbTarget, $logicalTable, array $columns, arr
         )
     );
 
-    $tableSql = quote_pg_identifier($logicalTable);
+    $tableSql = quote_pg_identifier($targetTable);
     $columnSql = implode(', ', array_map('quote_pg_identifier', $columns));
     $rows = array();
     $minTs = null;
@@ -244,13 +279,13 @@ function filter_missing_rows(array $sourceRows, array $targetRows, array $column
     return array($missingRows, $targetMatchCount);
 }
 
-function insert_rows($dbTarget, $logicalTable, array $columns, array $rows)
+function insert_rows($dbTarget, $targetTable, array $columns, array $rows)
 {
     if (empty($rows)) {
         return 0;
     }
 
-    $tableSql = quote_pg_identifier($logicalTable);
+    $tableSql = quote_pg_identifier($targetTable);
     $columnSql = implode(', ', array_map('quote_pg_identifier', $columns));
     $valueSql = '(' . implode(', ', array_fill(0, count($columns), '?')) . ')';
     $sql = 'INSERT INTO ' . $tableSql . ' (' . $columnSql . ') VALUES ' . $valueSql;
@@ -299,16 +334,17 @@ function copy_segment_batch(
         );
     }
 
+    $targetTable = resolve_target_table_name($dbTarget, $logicalTable);
     $sourceColumns = array_keys($sourceRows[0]);
     $columnMap = build_target_column_map($dbTarget, $logicalTable, $sourceColumns);
     $columns = array_values($columnMap);
     $mappedSourceRows = remap_source_rows($sourceRows, $columnMap);
-    $targetRows = chunked_target_candidates($dbTarget, $logicalTable, $columns, $mappedSourceRows);
+    $targetRows = chunked_target_candidates($dbTarget, $targetTable, $columns, $mappedSourceRows);
     list($missingRows, $targetMatches) = filter_missing_rows($mappedSourceRows, $targetRows, $columns);
 
     $insertedRows = 0;
     if ($apply && !empty($missingRows)) {
-        $insertedRows = insert_rows($dbTarget, $logicalTable, $columns, $missingRows);
+        $insertedRows = insert_rows($dbTarget, $targetTable, $columns, $missingRows);
     }
 
     $nextCopiedUntilId = max(
