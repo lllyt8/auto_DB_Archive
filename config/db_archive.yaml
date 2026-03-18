@@ -3,8 +3,8 @@ max_generations: 4
 schedule_timezone: EST
 dry_run: true
 log_path: /home/epc_ai/auto_DB_Archive/logs/db_archive.log
-coordination_lock_path: /home/epcenergy/coordination/db_repl_archive.lock
-shared_state_dir: /home/epcenergy/coordination/streams
+coordination_lock_path: /home/epc_ai/coordination/db_repl_archive.lock
+shared_state_dir: /home/epc_ai/coordination/streams
 drop_requires_replication_complete: true
 
 tables:
