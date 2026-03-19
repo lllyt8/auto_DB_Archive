@@ -145,6 +145,7 @@ function fetch_target_columns($dbTarget, $logicalTable)
 function build_target_column_map($dbTarget, $logicalTable, array $sourceColumns)
 {
     static $cache = array();
+    static $skippedWarnings = array();
     $cacheKey = $logicalTable . '|' . implode(',', $sourceColumns);
     if (isset($cache[$cacheKey])) {
         return $cache[$cacheKey];
@@ -162,6 +163,7 @@ function build_target_column_map($dbTarget, $logicalTable, array $sourceColumns)
     }
 
     $mapping = array();
+    $skippedColumns = array();
     foreach ($sourceColumns as $sourceColumn) {
         if (isset($exact[$sourceColumn])) {
             $mapping[$sourceColumn] = $sourceColumn;
@@ -170,12 +172,32 @@ function build_target_column_map($dbTarget, $logicalTable, array $sourceColumns)
 
         $canonicalKey = canonicalize_column_name($sourceColumn);
         $matches = $canonical[$canonicalKey] ?? array();
-        if (count($matches) !== 1) {
+        if (count($matches) === 1) {
+            $mapping[$sourceColumn] = $matches[0];
+            continue;
+        }
+        if (count($matches) > 1) {
             throw new RuntimeException(
-                "Unable to map source column {$sourceColumn} to target table {$logicalTable}"
+                "Ambiguous target column mapping for {$sourceColumn} on {$logicalTable}"
             );
         }
-        $mapping[$sourceColumn] = $matches[0];
+
+        $skippedColumns[] = $sourceColumn;
+    }
+
+    if (empty($mapping)) {
+        throw new RuntimeException("No shared columns found for target table {$logicalTable}");
+    }
+
+    if (!empty($skippedColumns)) {
+        sort($skippedColumns);
+        $warningKey = $logicalTable . '|' . implode(',', $skippedColumns);
+        if (!isset($skippedWarnings[$warningKey])) {
+            log_message(
+                'Skipping unmapped source columns table=' . $logicalTable . ' columns=' . implode(',', $skippedColumns)
+            );
+            $skippedWarnings[$warningKey] = true;
+        }
     }
 
     $cache[$cacheKey] = $mapping;
