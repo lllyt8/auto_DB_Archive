@@ -15,7 +15,7 @@ $DBTS_PW = "rpltd7b7w9gnka4s";
 $DBTS_NAME = "tsdb";
 
 /** ------------------------------------------------------- */
-$REPL_COORDINATION_DIR = "/home/epcenergy/coordination";
+$REPL_COORDINATION_DIR = "/home/epc_ai/coordination";
 $REPL_LOCK_FILE = $REPL_COORDINATION_DIR . "/db_repl_archive.lock";
 $REPL_STREAM_STATE_DIR = $REPL_COORDINATION_DIR . "/streams";
 $REPL_BATCH_SIZE = 2000;

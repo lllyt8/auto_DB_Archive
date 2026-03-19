@@ -19,15 +19,15 @@ Copy the updated files to the server:
 Create the shared coordination directory used by both PHP replication and Python archive:
 
 ```bash
-mkdir -p /home/epcenergy/coordination/streams
-chown -R epcenergy:epcenergy /home/epcenergy/coordination
-chmod -R 775 /home/epcenergy/coordination
+mkdir -p /home/epc_ai/coordination/streams
+chown -R epc_ai:epc_ai /home/epc_ai/coordination
+chmod -R 775 /home/epc_ai/coordination
 ```
 
 Expected files at runtime:
 
-- `/home/epcenergy/coordination/db_repl_archive.lock`
-- `/home/epcenergy/coordination/streams/*.json`
+- `/home/epc_ai/coordination/db_repl_archive.lock`
+- `/home/epc_ai/coordination/streams/*.json`
 
 ## 3) Install Python requirements
 ```bash
@@ -81,7 +81,7 @@ php repl/data_replication.php
 
 Expected behavior:
 
-1. The script acquires `/home/epcenergy/coordination/db_repl_archive.lock`.
+1. The script acquires `/home/epc_ai/coordination/db_repl_archive.lock`.
 2. It processes closed archive segments before the open current segment.
 3. It logs a per-table summary without mentioning `last_ts`.
 
@@ -127,5 +127,5 @@ If the new flow needs to be disabled:
 
 1. Stop the new replication cron.
 2. Stop the new archive cron.
-3. Keep `/home/epcenergy/coordination/streams` intact for forensic review.
+3. Keep `/home/epc_ai/coordination/streams` intact for forensic review.
 4. Restore the previous PHP replication and archive scripts only after confirming which archive segments have already been rotated and which have been replicated.

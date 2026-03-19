@@ -211,10 +211,10 @@ def load_config(path: str) -> AppConfig:
         lock_path=str(
             cfg.get(
                 "coordination_lock_path",
-                cfg.get("lock_path", "/home/epcenergy/coordination/db_repl_archive.lock"),
+                cfg.get("lock_path", "/home/epc_ai/coordination/db_repl_archive.lock"),
             )
         ),
-        state_dir=str(cfg.get("shared_state_dir", "/home/epcenergy/coordination/streams")),
+        state_dir=str(cfg.get("shared_state_dir", "/home/epc_ai/coordination/streams")),
         drop_requires_replication_complete=bool(cfg.get("drop_requires_replication_complete", True)),
         wait_timeout_seconds=int(cfg.get("coordination_wait_timeout_seconds", 900)),
         wait_poll_seconds=int(cfg.get("coordination_wait_poll_seconds", 30)),
